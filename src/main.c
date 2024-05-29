@@ -26,6 +26,8 @@
 
 #include <dk_buttons_and_leds.h>
 
+#include <zephyr/display/mb_display.h>
+
 #define DEVICE_NAME             CONFIG_BT_DEVICE_NAME
 #define DEVICE_NAME_LEN         (sizeof(DEVICE_NAME) - 1)
 
@@ -38,7 +40,38 @@
 
 #define USER_BUTTON             DK_BTN1_MSK
 
+static struct mb_image light_on = MB_IMAGE(
+					 { 0, 1, 1, 1, 0 },
+					 { 1, 0, 0, 0, 1 },
+					 { 1, 0, 0, 0, 1 },
+					 { 0, 1, 1, 1, 0 },
+					 { 0, 1, 1, 1, 0 });
+
+static struct mb_image light_off = MB_IMAGE(
+					 { 0, 0, 0, 0, 0 },
+					 { 0, 0, 0, 0, 0 },
+					 { 0, 0, 0, 0, 0 },
+					 { 0, 1, 1, 1, 0 },
+					 { 0, 1, 1, 1, 0 });
+
+static struct mb_image ble_disconnected = MB_IMAGE(
+					 { 1, 0, 0, 0, 0 },
+					 { 0, 0, 0, 0, 0 },
+					 { 0, 0, 0, 0, 0 },
+					 { 0, 0, 0, 0, 0 },
+					 { 0, 0, 0, 0, 0 });
+
+static struct mb_image blank = MB_IMAGE(
+					 { 0, 0, 0, 0, 0 },
+					 { 0, 0, 0, 0, 0 },
+					 { 0, 0, 0, 0, 0 },
+					 { 0, 0, 0, 0, 0 },
+					 { 0, 0, 0, 0, 0 });
+
 static bool app_button_state;
+static bool app_led_state;
+static bool ble_conn_state;
+static struct mb_display *disp;
 
 static const struct bt_data ad[] = {
 	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
@@ -58,14 +91,22 @@ static void connected(struct bt_conn *conn, uint8_t err)
 
 	printk("Connected\n");
 
-	dk_set_led_on(CON_STATUS_LED);
+	if (app_led_state) {
+		mb_display_image(disp, MB_DISPLAY_FLAG_LOOP, 5 * MSEC_PER_SEC,
+				&light_on, 1);
+	} else {
+		mb_display_image(disp, MB_DISPLAY_FLAG_LOOP, 5 * MSEC_PER_SEC,
+				&light_off, 1);
+	}
+	ble_conn_state = true;
 }
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	printk("Disconnected (reason %u)\n", reason);
 
-	dk_set_led_off(CON_STATUS_LED);
+	//dk_set_led_off(CON_STATUS_LED);
+	ble_conn_state = false;
 }
 
 #ifdef CONFIG_BT_LBS_SECURITY_ENABLED
@@ -146,7 +187,15 @@ static struct bt_conn_auth_info_cb conn_auth_info_callbacks;
 
 static void app_led_cb(bool led_state)
 {
-	dk_set_led(USER_LED, led_state);
+	printk("led state: %d\n", led_state);
+	app_led_state = led_state;
+	if (app_led_state) {
+		mb_display_image(disp, MB_DISPLAY_FLAG_LOOP, 5 * MSEC_PER_SEC,
+				&light_on, 1);
+	} else {
+		mb_display_image(disp, MB_DISPLAY_FLAG_LOOP, 5 * MSEC_PER_SEC,
+				&light_off, 1);
+	}
 }
 
 static bool app_button_cb(void)
@@ -166,6 +215,7 @@ static void button_changed(uint32_t button_state, uint32_t has_changed)
 
 		bt_lbs_send_button_state(user_button_state);
 		app_button_state = user_button_state ? true : false;
+		printk("app_button_state: %d\n", app_button_state);
 	}
 }
 
@@ -188,11 +238,7 @@ int main(void)
 
 	printk("Starting Bluetooth Peripheral LBS example\n");
 
-	err = dk_leds_init();
-	if (err) {
-		printk("LEDs init failed (err %d)\n", err);
-		return 0;
-	}
+	disp = mb_display_get();
 
 	err = init_button();
 	if (err) {
@@ -241,8 +287,17 @@ int main(void)
 
 	printk("Advertising successfully started\n");
 
+	k_sleep(K_SECONDS(2));
 	for (;;) {
-		dk_set_led(RUN_STATUS_LED, (++blink_status) % 2);
+		if (!ble_conn_state) {
+			if ((++blink_status) % 2) {
+				mb_display_image(disp, MB_DISPLAY_FLAG_LOOP, 1 * MSEC_PER_SEC,
+						&ble_disconnected, 1);
+			} else {
+				mb_display_image(disp, MB_DISPLAY_FLAG_LOOP, 1 * MSEC_PER_SEC,
+						&blank, 1);
+			}
+		}
 		k_sleep(K_MSEC(RUN_LED_BLINK_INTERVAL));
 	}
 }

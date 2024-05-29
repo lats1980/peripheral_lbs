@@ -1,0 +1,22 @@
+/*
+ * Copyright (c) 2021 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+/ {
+	buttons {
+		compatible = "gpio-keys";
+		button0: button_0 {
+			label = "BTN_A";
+			gpios = <&gpio0 14 GPIO_ACTIVE_LOW>;
+			zephyr,code = <INPUT_KEY_A>;
+		};
+
+		button1: button_1 {
+			label = "BTN_B";
+			gpios = <&gpio0 23 GPIO_ACTIVE_LOW>;
+			zephyr,code = <INPUT_KEY_B>;
+		};
+	};
+};
